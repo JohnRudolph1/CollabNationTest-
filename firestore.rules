@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuth() { return request.auth != null; }
+    function isSelf(uid) { return isAuth() && request.auth.uid == uid; }
+    function shortText(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+
+    match /usersPublic/{userId} {
+      allow read: if true;
+      allow create, update: if isSelf(userId)
+        && request.resource.data.keys().hasOnly(['username','avatar','bio','skills','interests','availability','updatedAt','createdAt'])
+        && shortText(request.resource.data.username, 2, 32)
+        && (!('bio' in request.resource.data) || shortText(request.resource.data.bio, 0, 280))
+        && request.resource.data.skills is list
+        && request.resource.data.skills.size() <= 20
+        && request.resource.data.interests is list
+        && request.resource.data.interests.size() <= 20;
+      allow delete: if false;
+    }
+
+    match /usersPrivate/{userId} {
+      allow read, create, update: if isSelf(userId);
+      allow delete: if false;
+    }
+
+    match /projects/{projectId} {
+      allow create: if isAuth()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['ownerId','ownerUsername','ownerAvatar','title','body','skills','visibility','createdAt','collaboratorIds','hotScore'])
+        && shortText(request.resource.data.title, 5, 120)
+        && shortText(request.resource.data.body, 10, 3000)
+        && request.resource.data.skills is list
+        && request.resource.data.skills.size() <= 25
+        && request.resource.data.visibility in ['public','private'];
+      allow read: if isAuth() && (
+        resource.data.visibility == 'public' ||
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.collaboratorIds is list && request.auth.uid in resource.data.collaboratorIds)
+      );
+      allow update: if isAuth() && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAuth() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /collaborationRequests/{requestId} {
+      allow create: if isAuth()
+        && request.resource.data.requesterId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['projectId','projectOwnerId','requesterId','requesterUsername','status','message','createdAt'])
+        && request.resource.data.status == 'pending'
+        && shortText(request.resource.data.message, 1, 500);
+      allow read: if isAuth() && (resource.data.requesterId == request.auth.uid || resource.data.projectOwnerId == request.auth.uid);
+      allow update: if isAuth() && resource.data.projectOwnerId == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['accepted','declined']
+        && request.resource.data.requesterId == resource.data.requesterId
+        && request.resource.data.projectId == resource.data.projectId;
+      allow delete: if false;
+    }
+
+    match /comments/{commentId} {
+      allow create: if isAuth()
+        && request.resource.data.authorId == request.auth.uid
+        && shortText(request.resource.data.body, 1, 800)
+        && request.resource.data.projectId is string;
+      allow read: if isAuth();
+      allow delete: if isAuth() && resource.data.authorId == request.auth.uid;
+      allow update: if false;
+    }
+
+    match /conversations/{conversationId} {
+      allow create: if isAuth()
+        && request.resource.data.keys().hasOnly(['participantIds','lastMessage','lastMessageAt','createdAt'])
+        && request.resource.data.participantIds is list
+        && request.resource.data.participantIds.size() >= 1
+        && request.resource.data.participantIds.size() <= 20
+        && request.auth.uid in request.resource.data.participantIds;
+      allow read, update: if isAuth() && request.auth.uid in resource.data.participantIds;
+      allow delete: if false;
+    }
+  }
+}
