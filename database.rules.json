@@ -1,0 +1,40 @@
+{
+  "rules": {
+    "messages": {
+      "$threadId": {
+        ".read": "auth != null && root.child('threadParticipants').child($threadId).child(auth.uid).val() === true",
+        "$messageId": {
+          ".write": "auth != null && root.child('threadParticipants').child($threadId).child(auth.uid).val() === true && newData.child('senderId').val() === auth.uid",
+          ".validate": "newData.hasChildren(['senderId','text','createdAt']) && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('createdAt').isNumber()"
+        }
+      }
+    },
+    "threadParticipants": {
+      "$threadId": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+    "votes": {
+      "$projectId": {
+        "$uid": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === $uid && !data.exists()",
+          ".validate": "newData.isNumber() && (newData.val() === 1 || newData.val() === -1)"
+        }
+      }
+    },
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "networks": {
+      ".read": true,
+      ".write": "auth != null"
+    }
+  }
+}
